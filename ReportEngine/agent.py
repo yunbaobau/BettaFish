@@ -1442,10 +1442,9 @@ class ReportAgent:
         Returns:
             检查结果字典，包含文件计数、缺失列表、最新文件路径等
         """
-        # 检查各个报告目录的文件数量变化
+        # 检查各个报告目录的文件数量变化（只检查启用的引擎）
         directories = {
             'insight': insight_dir,
-            'media': media_dir,
             'query': query_dir
         }
         

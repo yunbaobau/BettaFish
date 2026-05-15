@@ -413,7 +413,6 @@ def check_engines_ready() -> Dict[str, Any]:
     """
     directories = {
         'insight': 'insight_engine_streamlit_reports',
-        'media': 'media_engine_streamlit_reports',
         'query': 'query_engine_streamlit_reports'
     }
 
@@ -426,9 +425,9 @@ def check_engines_ready() -> Dict[str, Any]:
         }
 
     return report_agent.check_input_files(
-        directories['insight'],
-        directories['media'],
-        directories['query'],
+        directories.get('insight', 'insight_engine_streamlit_reports'),
+        directories.get('media', 'media_engine_streamlit_reports'),
+        directories.get('query', 'query_engine_streamlit_reports'),
         forum_log_path
     )
 
