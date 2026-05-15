@@ -553,6 +553,14 @@ def run_report_generation(task: ReportTask, query: str, custom_template: str = "
             'task': task.to_dict(),
         })
         task.update_status("completed", 100)
+
+        # 报告完成时推送微信通知
+        try:
+            from utils.wechat_push import push_report
+            push_report(task_id, query, task.report_file_relative_path or task.report_file_path)
+        except Exception as push_err:
+            logger.warning(f"微信推送失败（不影响主流程）: {push_err}")
+
         task.publish_event('completed', {
             'message': '任务完成',
             'duration_seconds': (task.updated_at - task.created_at).total_seconds(),
