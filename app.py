@@ -505,7 +505,7 @@ processes = {
 
 STREAMLIT_SCRIPTS = {
     'insight': 'SingleEngineApp/insight_engine_streamlit_app.py',
-    'media': 'SingleEngineApp/media_engine_streamlit_app.py',
+    # 'media': 'SingleEngineApp/media_engine_streamlit_app.py',  # Media Agent 已屏蔽
     'query': 'SingleEngineApp/query_engine_streamlit_app.py'
 }
 
