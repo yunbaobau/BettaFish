@@ -1,7 +1,7 @@
 """
 图表API修复模块。
 
-提供调用4个Engine（ReportEngine, ForumEngine, InsightEngine, MediaEngine）的LLM API
+提供调用3个Engine（ReportEngine, InsightEngine, MediaEngine）的LLM API
 来修复图表数据的功能。
 """
 
@@ -366,11 +366,10 @@ def create_llm_repair_functions() -> List:
     """
     创建LLM修复函数列表。
 
-    返回4个Engine的修复函数：
+    返回3个Engine的修复函数：
     1. ReportEngine
-    2. ForumEngine (通过ForumHost)
-    3. InsightEngine
-    4. MediaEngine
+    2. InsightEngine
+    3. MediaEngine
 
     Returns:
         List[Callable]: 修复函数列表
@@ -412,41 +411,7 @@ def create_llm_repair_functions() -> List:
         repair_functions.append(repair_with_report_engine)
         logger.debug("已添加ReportEngine图表修复函数")
 
-    # 2. ForumEngine修复函数
-    if settings.FORUM_HOST_API_KEY and settings.FORUM_HOST_BASE_URL:
-        def repair_with_forum_engine(widget_block: Dict[str, Any], errors: List[str]) -> Optional[Dict[str, Any]]:
-            """使用ForumEngine的LLM修复图表"""
-            try:
-                from ReportEngine.llms import LLMClient
-
-                client = LLMClient(
-                    api_key=settings.FORUM_HOST_API_KEY,
-                    base_url=settings.FORUM_HOST_BASE_URL,
-                    model_name=settings.FORUM_HOST_MODEL_NAME or "gpt-4",
-                )
-
-                prompt = build_chart_repair_prompt(widget_block, errors)
-                response = client.invoke(
-                    CHART_REPAIR_SYSTEM_PROMPT,
-                    prompt,
-                    temperature=0.0,
-                    top_p=0.05
-                )
-
-                if not response:
-                    return None
-
-                repaired = json.loads(response)
-                return repaired
-
-            except Exception as e:
-                logger.exception(f"ForumEngine图表修复失败: {e}")
-                return None
-
-        repair_functions.append(repair_with_forum_engine)
-        logger.debug("已添加ForumEngine图表修复函数")
-
-    # 3. InsightEngine修复函数
+    # 2. InsightEngine修复函数
     if settings.INSIGHT_ENGINE_API_KEY and settings.INSIGHT_ENGINE_BASE_URL:
         def repair_with_insight_engine(widget_block: Dict[str, Any], errors: List[str]) -> Optional[Dict[str, Any]]:
             """使用InsightEngine的LLM修复图表"""

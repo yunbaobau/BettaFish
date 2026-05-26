@@ -136,9 +136,9 @@ class FileCountBaseline:
                 
                 if current_counts[engine] > baseline_count:
                     new_files_found[engine] = current_counts[engine] - baseline_count
-                else:
+                elif current_counts[engine] > 0:
+                    # 有报告文件但无新增（如重启后基线重置），也视为就绪
                     new_files_found[engine] = 0
-                    all_have_new = False
             else:
                 current_counts[engine] = 0
                 new_files_found[engine] = 0
@@ -252,7 +252,7 @@ class ReportAgent:
 
             使用路径匹配为主，无法获取路径时退化到模块名。
             """
-            excluded_keywords = ("InsightEngine", "MediaEngine", "QueryEngine", "ForumEngine")
+            excluded_keywords = ("InsightEngine", "MediaEngine", "QueryEngine")
             try:
                 file_path = record["file"].path
                 if any(keyword in file_path for keyword in excluded_keywords):
@@ -345,18 +345,12 @@ class ReportAgent:
         """
         初始化跨引擎章节修复所需的LLM客户端列表。
 
-        顺序遵循“Report → Forum → Insight → Media”，缺失配置会被自动跳过。
+        顺序遵循“Report → Insight → Media”，缺失配置会被自动跳过。
         """
         clients: List[Tuple[str, LLMClient]] = []
         if self.llm_client:
             clients.append(("report_engine", self.llm_client))
         fallback_specs = [
-            (
-                "forum_engine",
-                self.config.FORUM_HOST_API_KEY,
-                self.config.FORUM_HOST_MODEL_NAME,
-                self.config.FORUM_HOST_BASE_URL,
-            ),
             (
                 "insight_engine",
                 self.config.INSIGHT_ENGINE_API_KEY,
@@ -1429,16 +1423,15 @@ class ReportAgent:
         self.state.save_to_file(filepath)
         logger.info(f"状态已保存到 {filepath}")
     
-    def check_input_files(self, insight_dir: str, media_dir: str, query_dir: str, forum_log_path: str) -> Dict[str, Any]:
+    def check_input_files(self, insight_dir: str, media_dir: str, query_dir: str) -> Dict[str, Any]:
         """
         检查输入文件是否准备就绪（基于文件数量增加）。
-        
+
         Args:
             insight_dir: InsightEngine报告目录
             media_dir: MediaEngine报告目录
             query_dir: QueryEngine报告目录
-            forum_log_path: 论坛日志文件路径
-            
+
         Returns:
             检查结果字典，包含文件计数、缺失列表、最新文件路径等
         """
@@ -1447,16 +1440,13 @@ class ReportAgent:
             'insight': insight_dir,
             'query': query_dir
         }
-        
+
         # 使用文件基准管理器检查新文件
         check_result = self.file_baseline.check_new_files(directories)
-        
-        # 检查论坛日志
-        forum_ready = os.path.exists(forum_log_path)
-        
+
         # 构建返回结果
         result = {
-            'ready': check_result['ready'] and forum_ready,
+            'ready': check_result['ready'],
             'baseline_counts': check_result['baseline_counts'],
             'current_counts': check_result['current_counts'],
             'new_files_found': check_result['new_files_found'],
@@ -1464,46 +1454,38 @@ class ReportAgent:
             'files_found': [],
             'latest_files': {}
         }
-        
+
         # 构建详细信息
         for engine, new_count in check_result['new_files_found'].items():
             current_count = check_result['current_counts'][engine]
             baseline_count = check_result['baseline_counts'].get(engine, 0)
-            
+
             if new_count > 0:
                 result['files_found'].append(f"{engine}: {current_count}个文件 (新增{new_count}个)")
             else:
                 result['missing_files'].append(f"{engine}: {current_count}个文件 (基准{baseline_count}个，无新增)")
-        
-        # 检查论坛日志
-        if forum_ready:
-            result['files_found'].append(f"forum: {os.path.basename(forum_log_path)}")
-        else:
-            result['missing_files'].append("forum: 日志文件不存在")
-        
+
         # 获取最新文件路径（用于实际报告生成）
         if result['ready']:
             result['latest_files'] = self.file_baseline.get_latest_files(directories)
-            if forum_ready:
-                result['latest_files']['forum'] = forum_log_path
-        
+
         return result
     
     def load_input_files(self, file_paths: Dict[str, str]) -> Dict[str, Any]:
         """
         加载输入文件内容
-        
+
         Args:
             file_paths: 文件路径字典
-            
+
         Returns:
-            加载的内容字典，包含 `reports` 列表与 `forum_logs` 字符串
+            加载的内容字典，包含 `reports` 列表
         """
         content = {
             'reports': [],
             'forum_logs': ''
         }
-        
+
         # 加载报告文件
         engines = ['query', 'media', 'insight']
         for engine in engines:
@@ -1516,16 +1498,7 @@ class ReportAgent:
                 except Exception as e:
                     logger.exception(f"加载 {engine} 报告失败: {str(e)}")
                     content['reports'].append("")
-        
-        # 加载论坛日志
-        if 'forum' in file_paths:
-            try:
-                with open(file_paths['forum'], 'r', encoding='utf-8') as f:
-                    content['forum_logs'] = f.read()
-                logger.info(f"已加载论坛日志: {len(content['forum_logs'])} 字符")
-            except Exception as e:
-                logger.exception(f"加载论坛日志失败: {str(e)}")
-        
+
         return content
 
 

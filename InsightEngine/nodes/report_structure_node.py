@@ -21,17 +21,19 @@ from ..utils.text_processing import (
 
 class ReportStructureNode(StateMutationNode):
     """生成报告结构的节点"""
-    
-    def __init__(self, llm_client, query: str):
+
+    def __init__(self, llm_client, query: str, max_paragraphs: int = 1):
         """
         初始化报告结构节点
-        
+
         Args:
             llm_client: LLM客户端
             query: 用户查询
+            max_paragraphs: 最大段落数
         """
         super().__init__(llm_client, "ReportStructureNode")
         self.query = query
+        self.max_paragraphs = max_paragraphs
     
     def validate_input(self, input_data: Any) -> bool:
         """验证输入数据"""
@@ -140,6 +142,12 @@ class ReportStructureNode(StateMutationNode):
                 return self._generate_default_structure()
             
             logger.info(f"成功验证 {len(validated_structure)} 个段落结构")
+
+            # 限制段落数
+            if len(validated_structure) > self.max_paragraphs:
+                logger.info(f"段落数 {len(validated_structure)} 超过上限 {self.max_paragraphs}，截取前 {self.max_paragraphs} 个")
+                validated_structure = validated_structure[:self.max_paragraphs]
+
             return validated_structure
             
         except Exception as e:

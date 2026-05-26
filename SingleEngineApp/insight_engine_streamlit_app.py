@@ -60,7 +60,7 @@ def main():
     # 强制使用 Kimi
     model_name = settings.INSIGHT_ENGINE_MODEL_NAME or "kimi-k2-0711-preview"
     # 默认高级配置
-    max_reflections = 2
+    max_reflections = 1
     max_content_length = 500000  # Kimi支持长文本
 
     # 简化的研究查询展示区域

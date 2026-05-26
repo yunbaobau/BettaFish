@@ -23,7 +23,7 @@ from .nodes import (
     ReportFormattingNode,
     ReportStructureNode,
 )
-from .state import State
+from .state import State, Paragraph
 from .tools import (
     DBResponse,
     MediaCrawlerDB,
@@ -547,19 +547,21 @@ class DeepSearchAgent:
             raise e
 
     def _generate_report_structure(self, query: str):
-        """生成报告结构"""
+        """生成报告结构（MAX_PARAGRAPHS<=1时跳过LLM，直接创建）"""
         logger.info(f"\n[步骤 1] 生成报告结构...")
 
-        # 创建报告结构节点
-        report_structure_node = ReportStructureNode(self.llm_client, query)
-
-        # 生成结构并更新状态
-        self.state = report_structure_node.mutate_state(state=self.state)
-
-        _message = f"报告结构已生成，共 {len(self.state.paragraphs)} 个段落:"
-        for i, paragraph in enumerate(self.state.paragraphs, 1):
-            _message += f"\n  {i}. {paragraph.title}"
-        logger.info(_message)
+        if self.config.MAX_PARAGRAPHS <= 1:
+            # 跳过LLM，直接用查询词作为段落
+            p = Paragraph(title=query, content=query, order=0)
+            self.state.paragraphs = [p]
+            logger.info(f"报告结构已生成（快速模式），共 1 个段落: {query}")
+        else:
+            report_structure_node = ReportStructureNode(self.llm_client, query, self.config.MAX_PARAGRAPHS)
+            self.state = report_structure_node.mutate_state(state=self.state)
+            _message = f"报告结构已生成，共 {len(self.state.paragraphs)} 个段落:"
+            for i, paragraph in enumerate(self.state.paragraphs, 1):
+                _message += f"\n  {i}. {paragraph.title}"
+            logger.info(_message)
 
     def _process_paragraphs(self):
         """处理所有段落"""

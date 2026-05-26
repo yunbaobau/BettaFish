@@ -46,10 +46,10 @@ class Settings(BaseSettings):
     INSIGHT_ENGINE_BASE_URL: Optional[str] = Field("https://api.moonshot.cn/v1", description="Insight Agent LLM BaseUrl，可根据厂商自定义")
     INSIGHT_ENGINE_MODEL_NAME: str = Field("kimi-k2-0711-preview", description="Insight Agent LLM 模型名称，例如 kimi-k2-0711-preview")
     
-    # Media Agent（推荐Gemini，推荐中转厂商：https://aihubmix.com/?aff=8Ds9）
-    MEDIA_ENGINE_API_KEY: Optional[str] = Field(None, description="Media Agent（推荐 gemini-2.5-pro，中转厂商申请地址：https://aihubmix.com/?aff=8Ds9）API 密钥")
-    MEDIA_ENGINE_BASE_URL: Optional[str] = Field("https://aihubmix.com/v1", description="Media Agent LLM BaseUrl，可根据中转服务调整")
-    MEDIA_ENGINE_MODEL_NAME: str = Field("gemini-2.5-pro", description="Media Agent LLM 模型名称，如 gemini-2.5-pro")
+    # Media Agent — 已屏蔽，暂时禁用（保留字段定义供ReportEngine兼容，值设为None）
+    MEDIA_ENGINE_API_KEY: Optional[str] = Field(None, description="[已屏蔽] Media Agent API 密钥")
+    MEDIA_ENGINE_BASE_URL: Optional[str] = Field(None, description="[已屏蔽] Media Agent LLM BaseUrl")
+    MEDIA_ENGINE_MODEL_NAME: Optional[str] = Field(None, description="[已屏蔽] Media Agent LLM 模型名称")
     
     # Query Agent（推荐DeepSeek，申请地址：https://www.deepseek.com/）
     QUERY_ENGINE_API_KEY: Optional[str] = Field(None, description="Query Agent（推荐 deepseek，官方申请地址：https://platform.deepseek.com/）API 密钥")
@@ -65,12 +65,7 @@ class Settings(BaseSettings):
     MINDSPIDER_API_KEY: Optional[str] = Field(None, description="MindSpider Agent（推荐 deepseek，官方申请地址：https://platform.deepseek.com/）API 密钥")
     MINDSPIDER_BASE_URL: Optional[str] = Field(None, description="MindSpider Agent BaseUrl，可按所选服务配置")
     MINDSPIDER_MODEL_NAME: Optional[str] = Field(None, description="MindSpider Agent 模型名称，例如 deepseek-reasoner")
-    
-    # Forum Host（Qwen3最新模型，这里我使用了硅基流动这个平台，申请地址：https://cloud.siliconflow.cn/）
-    FORUM_HOST_API_KEY: Optional[str] = Field(None, description="Forum Host（推荐 qwen-plus，官方申请地址：https://www.aliyun.com/product/bailian）API 密钥")
-    FORUM_HOST_BASE_URL: Optional[str] = Field(None, description="Forum Host LLM BaseUrl，可按所选服务配置")
-    FORUM_HOST_MODEL_NAME: Optional[str] = Field(None, description="Forum Host LLM 模型名称，例如 qwen-plus")
-    
+
     # SQL keyword Optimizer（小参数Qwen3模型，这里我使用了硅基流动这个平台，申请地址：https://cloud.siliconflow.cn/）
     KEYWORD_OPTIMIZER_API_KEY: Optional[str] = Field(None, description="SQL Keyword Optimizer（推荐 qwen-plus，官方申请地址：https://www.aliyun.com/product/bailian）API 密钥")
     KEYWORD_OPTIMIZER_BASE_URL: Optional[str] = Field(None, description="Keyword Optimizer BaseUrl，可按所选服务配置")
@@ -92,6 +87,9 @@ class Settings(BaseSettings):
     # ================== 微信推送配置 ====================
     SERVERCHAN_SENDKEY: Optional[str] = Field(None, description="Server酱 SendKey（申请地址：https://sct.ftqq.com/），用于报告完成时推送微信通知")
 
+    # ================== 自动查询配置 ====================
+    AUTO_QUERY_TOPICS: str = Field("", description="自动查询主题列表，多个主题用逗号分隔。例：中美贸易,芯片制裁,台海局势。配置后无需手动输入查询词")
+
 
     # ================== Insight Engine 搜索配置 ====================
     DEFAULT_SEARCH_HOT_CONTENT_LIMIT: int = Field(100, description="热榜内容默认最大数")
@@ -99,12 +97,12 @@ class Settings(BaseSettings):
     DEFAULT_SEARCH_TOPIC_BY_DATE_LIMIT_PER_TABLE: int = Field(100, description="按日期话题最大数")
     DEFAULT_GET_COMMENTS_FOR_TOPIC_LIMIT: int = Field(500, description="单话题评论最大数")
     DEFAULT_SEARCH_TOPIC_ON_PLATFORM_LIMIT: int = Field(200, description="平台搜索话题最大数")
-    MAX_SEARCH_RESULTS_FOR_LLM: int = Field(0, description="供LLM用搜索结果最大数")
+    MAX_SEARCH_RESULTS_FOR_LLM: int = Field(3, description="供LLM用搜索结果最大数")
     MAX_HIGH_CONFIDENCE_SENTIMENT_RESULTS: int = Field(0, description="高置信度情感分析最大数")
-    MAX_REFLECTIONS: int = Field(3, description="最大反思次数")
-    MAX_PARAGRAPHS: int = Field(6, description="最大段落数")
-    SEARCH_TIMEOUT: int = Field(240, description="单次搜索请求超时")
-    MAX_CONTENT_LENGTH: int = Field(500000, description="搜索最大内容长度")
+    MAX_REFLECTIONS: int = Field(0, description="最大反思次数")
+    MAX_PARAGRAPHS: int = Field(1, description="最大段落数")
+    SEARCH_TIMEOUT: int = Field(60, description="单次搜索请求超时")
+    MAX_CONTENT_LENGTH: int = Field(30000, description="搜索最大内容长度")
     
     model_config = ConfigDict(
         env_file=ENV_FILE,

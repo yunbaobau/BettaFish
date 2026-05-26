@@ -43,7 +43,7 @@ tasks_registry: Dict[str, 'ReportTask'] = {}
 LOG_STREAM_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 log_stream_handler_id: Optional[int] = None
 
-EXCLUDED_ENGINE_PATH_KEYWORDS = ("ForumEngine", "InsightEngine", "MediaEngine", "QueryEngine")
+EXCLUDED_ENGINE_PATH_KEYWORDS = ("InsightEngine", "MediaEngine", "QueryEngine")
 
 def _is_excluded_engine_log(record: Dict[str, Any]) -> bool:
     """
@@ -416,8 +416,6 @@ def check_engines_ready() -> Dict[str, Any]:
         'query': 'query_engine_streamlit_reports'
     }
 
-    forum_log_path = 'logs/forum.log'
-
     if not report_agent:
         return {
             'ready': False,
@@ -428,7 +426,6 @@ def check_engines_ready() -> Dict[str, Any]:
         directories.get('insight', 'insight_engine_streamlit_reports'),
         directories.get('media', 'media_engine_streamlit_reports'),
         directories.get('query', 'query_engine_streamlit_reports'),
-        forum_log_path
     )
 
 

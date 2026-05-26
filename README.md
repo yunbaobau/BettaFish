@@ -101,11 +101,9 @@ LLM模型API赞助：<a href="https://aihubmix.com/?aff=8Ds9" target="_blank"><i
 | 2 | 并行启动 | 三个Agent同时开始工作 | Query Agent、Media Agent、Insight Agent | - |
 | 3 | 初步分析 | 各Agent使用专属工具进行概览搜索 | 各Agent + 专属工具集 | - |
 | 4 | 策略制定 | 基于初步结果制定分块研究策略 | 各Agent内部决策模块 | - |
-| 5-N | **循环阶段** | **论坛协作 + 深度研究** | **ForumEngine + 所有Agent** | **多轮循环** |
-| 5.1 | 深度研究 | 各Agent基于论坛主持人引导进行专项搜索 | 各Agent + 反思机制 + 论坛引导 | 每轮循环 |
-| 5.2 | 论坛协作 | ForumEngine监控Agent发言并生成主持人引导 | ForumEngine + LLM主持人 | 每轮循环 |
-| 5.3 | 交流融合 | 各Agent根据讨论调整研究方向 | 各Agent + forum_reader工具 | 每轮循环 |
-| N+1 | 结果整合 | Report Agent收集所有分析结果和论坛内容 | Report Agent | - |
+| 5-N | **循环阶段** | **深度研究** | **所有Agent** | **多轮循环** |
+| 5.1 | 深度研究 | 各Agent基于反思机制进行专项搜索 | 各Agent + 反思机制 | 每轮循环 |
+| N+1 | 结果整合 | Report Agent收集所有分析结果 | Report Agent | - |
 | N+2 | IR中间表示 | 动态选择模板和样式，多轮生成元数据，装订为IR中间表示 | Report Agent + 模板引擎 | - |
 | N+3 | 报告生成 | 分块进行质量检测，基于IR渲染成交互式 HTML 报告 | Report Agent + 装订引擎 | - |
 
@@ -191,7 +189,6 @@ BettaFish/
 │   │   ├── 企业品牌声誉分析报告.md
 │   │   └── ...
 │   └── __init__.py
-├── ForumEngine/                            # 论坛引擎：Agent协作机制
 │   ├── monitor.py                          # 日志监控和论坛管理核心
 │   ├── llm_host.py                         # 论坛主持人LLM模块
 │   └── __init__.py
@@ -260,12 +257,10 @@ BettaFish/
 │   ├── ir/                                 # 报告IR JSON文件
 │   └── *.html                              # 最终HTML报告
 ├── utils/                                  # 通用工具函数
-│   ├── forum_reader.py                     # Agent间论坛通信工具
 │   ├── github_issues.py                    # 统一生成GitHub Issue链接与错误提示
 │   └── retry_helper.py                     # 网络请求重试机制工具
 ├── tests/                                  # 单元测试与集成测试
 │   ├── run_tests.py                        # pytest入口脚本
-│   ├── test_monitor.py                     # ForumEngine监控单元测试
 │   ├── test_report_engine_sanitization.py  # ReportEngine安全性测试
 │   └── ...
 ├── app.py                                  # Flask主应用入口

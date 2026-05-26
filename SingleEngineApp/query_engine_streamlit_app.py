@@ -60,7 +60,7 @@ def main():
     # 强制使用 DeepSeek
     model_name = settings.QUERY_ENGINE_MODEL_NAME or "deepseek-chat"
     # 默认高级配置
-    max_reflections = 2
+    max_reflections = 1
     max_content_length = 20000
 
     # 简化的研究查询展示区域

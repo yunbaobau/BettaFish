@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     # ================== 搜索参数配置 ====================
     SEARCH_TIMEOUT: int = Field(240, description="搜索超时（秒）")
     SEARCH_CONTENT_MAX_LENGTH: int = Field(20000, description="用于提示的最长内容长度")
-    MAX_REFLECTIONS: int = Field(2, description="最大反思轮数")
-    MAX_PARAGRAPHS: int = Field(5, description="最大段落数")
+    MAX_REFLECTIONS: int = Field(0, description="最大反思轮数")
+    MAX_PARAGRAPHS: int = Field(2, description="最大段落数")
     MAX_SEARCH_RESULTS: int = Field(20, description="最大搜索结果数")
     
     # ================== 输出配置 ====================

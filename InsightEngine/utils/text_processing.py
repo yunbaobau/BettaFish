@@ -285,24 +285,44 @@ def truncate_content(content: str, max_length: int = 20000) -> str:
         return truncated + "..."
 
 
-def format_search_results_for_prompt(search_results: List[Dict[str, Any]], 
+def format_search_results_for_prompt(search_results: List[Dict[str, Any]],
                                    max_length: int = 20000) -> List[str]:
     """
-    格式化搜索结果用于提示词
-    
+    格式化搜索结果用于提示词，保留标题、URL、平台和作者用于论文式引用。
+
     Args:
         search_results: 搜索结果列表
         max_length: 每个结果的最大长度
-        
+
     Returns:
-        格式化后的内容列表
+        格式化后的内容列表，每条含编号、标题、URL、平台、作者、日期和内容
     """
     formatted_results = []
-    
-    for result in search_results:
-        content = result.get('content', '')
-        if content:
-            truncated_content = truncate_content(content, max_length)
-            formatted_results.append(truncated_content)
-    
+
+    for idx, result in enumerate(search_results, 1):
+        title = result.get('title', '')
+        url = result.get('url', '')
+        content = result.get('content', '') or result.get('raw_content', '')
+        platform = result.get('platform', '')
+        author = result.get('author', '')
+        published_date = result.get('published_date', '')
+
+        if not content:
+            continue
+
+        truncated_content = truncate_content(content, max_length)
+
+        entry = f"[来源{idx}] {title}\n"
+        if url:
+            entry += f"URL: {url}\n"
+        if platform:
+            entry += f"平台: {platform}\n"
+        if author:
+            entry += f"作者: {author}\n"
+        if published_date:
+            entry += f"发布日期: {published_date}\n"
+        entry += f"内容: {truncated_content}"
+
+        formatted_results.append(entry)
+
     return formatted_results

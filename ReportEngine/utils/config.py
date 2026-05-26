@@ -16,15 +16,6 @@ class Settings(BaseSettings):
     REPORT_ENGINE_MODEL_NAME: Optional[str] = Field(None, description="Report Engine LLM模型名称")
     REPORT_ENGINE_PROVIDER: Optional[str] = Field(None, description="模型服务商，仅兼容保留")
     # 其他引擎API（用于跨引擎修复）
-    FORUM_HOST_API_KEY: Optional[str] = Field(
-        None, description="Forum Engine / Forum Host 的LLM API密钥（用于章节修复兜底）"
-    )
-    FORUM_HOST_BASE_URL: Optional[str] = Field(
-        None, description="Forum Engine API Base URL（为空则使用LLM默认配置）"
-    )
-    FORUM_HOST_MODEL_NAME: Optional[str] = Field(
-        None, description="Forum Engine LLM模型名称"
-    )
     INSIGHT_ENGINE_API_KEY: Optional[str] = Field(
         None, description="Insight Engine LLM API密钥，用于跨引擎章节修复"
     )
