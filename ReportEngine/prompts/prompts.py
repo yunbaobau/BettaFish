@@ -338,7 +338,7 @@ SYSTEM_PROMPT_CHAPTER_JSON = f"""
 20. 任何block都必须声明合法`type`（heading/paragraph/list/...）；若需要普通文本请使用`paragraph`并给出`inlines`，禁止返回`type:null`或未知值。
 21. blockquote内容限制：blockquote块内部的blocks只允许包含paragraph类型的block，严禁在blockquote内嵌套任何非paragraph块。
 22. 引用来源标注：paragraph中引用数据或事实时，在句末使用 marks.type="link" 标注来源链接，href 必须填写 reports 中的真实URL，不要编造。
-23. 精简输出：优先呈现关键发现和核心数据，每个章节控制在800-1500字以内，聚焦舆情要点和来源引用，避免冗长叙述。
+23. 极度精简输出：只写一句话总结+关键数据点，每个章节控制在150-300字以内，只列核心发现和数据，严禁展开叙述和背景铺垫，领导只需要看结论。
 
 <CHAPTER JSON SCHEMA>
 {CHAPTER_JSON_SCHEMA_TEXT}
@@ -444,7 +444,7 @@ SYSTEM_PROMPT_WORD_BUDGET = f"""
 你是报告篇幅规划官，会拿到 templateOverview（模板标题+目录）、最新的标题/目录设计稿与全部素材，需要给每章及其子主题分配字数。
 
 要求：
-1. 总字数约40000字，可上下浮动5%，并给出 globalGuidelines 说明整体详略策略；
+1. 总字数严格控制在3000-4000字以内，并给出 globalGuidelines 说明整体详略策略（极度精简，只保留核心数据和结论，删除所有铺垫和展开）；
 2. chapters 中每章需包含 targetWords/min/max、需要额外展开的 emphasis、sections 数组（为该章各小节/提纲分配字数与注意事项，可注明“允许在必要时超出10%补充案例”等）；
 3. rationale 必须解释该章篇幅配置理由，引用模板/素材中的关键信息；
 4. 章节编号遵循一级中文数字、二级阿拉伯数字，便于后续统一字号；

@@ -642,6 +642,7 @@ def generate_report():
             data = {}
         query = data.get('query', '智能舆情分析报告')
         custom_template = data.get('custom_template', '')
+        force = data.get('force', False)
 
         # 清空日志文件
         clear_report_log()
@@ -653,14 +654,18 @@ def generate_report():
                 'error': 'Report Engine未初始化'
             }), 500
 
-        # 检查输入文件是否准备就绪
+        # 检查输入文件是否准备就绪（force=True 时跳过基线检测）
         engines_status = check_engines_ready()
-        if not engines_status['ready']:
+        if not engines_status['ready'] and not force:
             return jsonify({
                 'success': False,
                 'error': '输入文件未准备就绪',
                 'missing_files': engines_status.get('missing_files', [])
             }), 400
+        if force and not engines_status['ready']:
+            # 强制模式：重置基线，用当前文件作为新基线
+            report_agent.initialize_baseline()
+            logger.info('强制生成模式：已重置文件基线')
 
         # 创建新任务
         task_id = f"report_{int(time.time())}"

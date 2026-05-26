@@ -11,29 +11,28 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from test_monitor import TestLogMonitor
+from tests.test_report_engine_sanitization import TestSanitization
 
 
 def main():
     """运行所有测试"""
     print("=" * 60)
-    print("ForumEngine 日志解析测试")
+    print("ReportEngine 数据清洗测试")
     print("=" * 60)
     print()
-    
-    test_instance = TestLogMonitor()
-    test_instance.setup_method()
-    
+
+    test_instance = TestSanitization()
+
     # 获取所有测试方法
     test_methods = [method for method in dir(test_instance) if method.startswith('test_')]
-    
+
     passed = 0
     failed = 0
-    
+
     for test_method_name in test_methods:
         test_method = getattr(test_instance, test_method_name)
         print(f"运行测试: {test_method_name}...", end=" ")
-        
+
         try:
             test_method()
             print("✓ 通过")
@@ -44,12 +43,12 @@ def main():
         except Exception as e:
             print(f"✗ 错误: {e}")
             failed += 1
-    
+
     print()
     print("=" * 60)
     print(f"测试结果: {passed} 通过, {failed} 失败")
     print("=" * 60)
-    
+
     if failed > 0:
         sys.exit(1)
     else:
@@ -58,4 +57,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

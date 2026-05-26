@@ -873,6 +873,8 @@ search_state = {
 
 # 收集所有搜索结果（用于最终汇总）
 all_search_results = {}  # {topic: {query_results: [...], insight_report: str}}
+# Insight 任务状态跟踪（用于前端轮询）
+insight_tasks = {}  # {task_id: {status, query, start_time, report, download_md, download_html}}
 summary_generated = False
 summary_report = ""
 
@@ -904,40 +906,131 @@ def update_search_progress():
     return jsonify({'success': True})
 
 
+@app.route('/api/insight-status/<task_id>')
+def insight_status(task_id):
+    """轮询 Insight 任务状态（前端每2秒调用）"""
+    task = insight_tasks.get(task_id)
+    if not task:
+        return jsonify({'success': False, 'message': '任务不存在'})
+    elapsed = (datetime.now() - task['start_time']).total_seconds() if task.get('start_time') else 0
+    return jsonify({
+        'success': True,
+        'status': task['status'],
+        'query': task['query'],
+        'elapsed_seconds': int(elapsed),
+        'download_md': task.get('download_md', ''),
+        'download_html': task.get('download_html', ''),
+        'report_preview': (task.get('report', '') or '')[:500],
+    })
+
+
 @app.route('/api/insight-search', methods=['POST'])
 def insight_search():
     """深度搜索 — 直接调用 InsightEngine Agent，完整 LLM 分析管道"""
     data = request.get_json()
     query = data.get('query', '').strip()
+    days = data.get('days', 0)
     if not query:
         return jsonify({'success': False, 'message': '查询不能为空'})
 
     task_id = str(uuid.uuid4())[:8]
-    thread = threading.Thread(target=_run_insight_search, args=(task_id, query), daemon=True)
+    thread = threading.Thread(target=_run_insight_search, args=(task_id, query, days), daemon=True)
     thread.start()
 
     return jsonify({'success': True, 'task_id': task_id, 'message': 'Insight 深度搜索已启动'})
 
 
-def _run_insight_search(task_id, query):
+def _run_insight_search(task_id, query, days=0):
     """后台运行 Insight 深度搜索"""
+    import threading as th
+    heartbeat_stop = th.Event()
+
+    def _heartbeat():
+        """每5秒发一次进度心跳，让前端知道还在运行"""
+        elapsed = 0
+        while not heartbeat_stop.is_set():
+            heartbeat_stop.wait(5)
+            if not heartbeat_stop.is_set():
+                elapsed += 5
+                socketio.emit('insight_progress', {
+                    'task_id': task_id, 'status': 'running',
+                    'query': query, 'message': f'分析中... 已运行 {elapsed}s'
+                })
+
+    # 初始化任务状态
+    insight_tasks[task_id] = {'status': 'starting', 'query': query, 'start_time': datetime.now(), 'report': '', 'download_md': '', 'download_html': ''}
+
     try:
+        socketio.emit('console_output', {'app': 'insight', 'line': f"[{datetime.now().strftime('%H:%M:%S')}] [Insight] 开始深度分析: {query}"})
         socketio.emit('insight_progress', {'task_id': task_id, 'status': 'starting', 'query': query, 'message': '正在初始化...'})
+        insight_tasks[task_id]['status'] = 'running'
         from InsightEngine.agent import DeepSearchAgent
         from InsightEngine.utils.config import settings as insight_settings
 
         agent = DeepSearchAgent(insight_settings)
-        socketio.emit('insight_progress', {'task_id': task_id, 'status': 'running', 'query': query, 'message': '正在生成报告结构...'})
-        report = agent.research(query, save_report=True)
+        socketio.emit('insight_progress', {'task_id': task_id, 'status': 'running', 'query': query, 'message': '正在搜索并分析...'})
+        # 启动心跳线程
+        hb = th.Thread(target=_heartbeat, daemon=True)
+        hb.start()
+        # 传入时间范围：将天数约束追加到查询中，供 Insight 搜索工具使用
+        if days and int(days) > 0:
+            time_constrained_query = f"{query} (近{int(days)}天内)"
+        else:
+            time_constrained_query = query
+        report = agent.research(time_constrained_query, save_report=True)
+        # 停止心跳
+        heartbeat_stop.set()
         # 保存到汇总结果
         if query not in all_search_results:
             all_search_results[query] = {'query_results': [], 'insight_report': ''}
         all_search_results[query]['insight_report'] = report or ''
-        socketio.emit('insight_progress', {'task_id': task_id, 'status': 'completed', 'query': query, 'message': 'Insight 分析完成', 'report': report[:2000] if report else ''})
-        logger.info(f"Insight 深度搜索完成: {query}")
+
+        # 查找并保存 Insight 报告的 HTML 版本
+        insight_html_url = ''
+        insight_md_url = ''
+        if report:
+            insight_path = Path('final_reports/insight')
+            insight_path.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            # 安全文件名：保留中英文数字，限制长度
+            safe_q = "".join(c for c in query if c.isalnum() or '一' <= c <= '鿿' or c in (' ', '-', '_')).strip()[:16]
+            insight_name = f'insight_{safe_q}_{ts}' if safe_q else f'insight_{ts}'
+            # 保存 .md
+            (insight_path / f'{insight_name}.md').write_text(report, encoding='utf-8')
+            # 保存 .html
+            _save_report_html(insight_path, insight_name, report, f'深度分析: {query}')
+            insight_md_url = f'/api/download/insight/{insight_name}.md'
+            insight_html_url = f'/api/download/insight/{insight_name}.html'
+            logger.info(f"Insight 报告已保存: {insight_name}")
+
+        insight_tasks[task_id] = {
+            'status': 'completed', 'query': query,
+            'start_time': insight_tasks[task_id]['start_time'],
+            'report': report or '', 'download_md': insight_md_url, 'download_html': insight_html_url
+        }
+        socketio.emit('insight_progress', {
+            'task_id': task_id, 'status': 'completed', 'query': query,
+            'message': 'Insight 分析完成',
+            'report': report[:2000] if report else '',
+            'download_md': insight_md_url,
+            'download_html': insight_html_url
+        })
+        socketio.emit('console_output', {'app': 'insight', 'line': f"[{datetime.now().strftime('%H:%M:%S')}] [Insight] 深度分析完成: {query}"})
+        logger.info(f"Insight 深度搜索完成: {query} (days={days})")
     except Exception as e:
+        heartbeat_stop.set()
+        insight_tasks[task_id] = {'status': 'error', 'query': query, 'start_time': insight_tasks[task_id]['start_time'], 'report': '', 'download_md': '', 'download_html': '', 'error': str(e)}
         logger.error(f"Insight 搜索失败: {e}")
         socketio.emit('insight_progress', {'task_id': task_id, 'status': 'error', 'query': query, 'message': str(e)})
+        socketio.emit('console_output', {'app': 'insight', 'line': f"[{datetime.now().strftime('%H:%M:%S')}] [Insight] 分析失败: {e}"})
+
+
+@app.route('/api/clear-results', methods=['POST'])
+def clear_results():
+    """清除之前的搜索结果，用于单主题手动搜索"""
+    all_search_results.clear()
+    search_state['results'] = {}
+    return jsonify({'success': True})
 
 
 @app.route('/api/quick-search', methods=['POST'])
@@ -945,14 +1038,19 @@ def quick_search():
     """快速搜索 — 直接使用 Tavily API，不经过 Streamlit，秒级返回"""
     data = request.get_json()
     query = data.get('query', '').strip()
+    days = data.get('days', 0)
     if not query:
         return jsonify({'success': False, 'message': '查询不能为空'})
 
     try:
+        socketio.emit('console_output', {'app': 'query', 'line': f"[{datetime.now().strftime('%H:%M:%S')}] [Query] 开始搜索: {query}"})
         from tavily import TavilyClient
         from config import settings
         client = TavilyClient(api_key=settings.TAVILY_API_KEY or '')
-        result = client.search(query, max_results=5, search_depth='basic')
+        kwargs = {'query': query, 'max_results': 5, 'search_depth': 'basic'}
+        if days and int(days) > 0:
+            kwargs['days'] = int(days)
+        result = client.search(**kwargs)
         results = []
         for r in result.get('results', []):
             results.append({
@@ -962,8 +1060,10 @@ def quick_search():
             })
         # 存储结果用于汇总
         all_search_results[query] = {'query_results': results, 'insight_report': ''}
+        socketio.emit('console_output', {'app': 'query', 'line': f"[{datetime.now().strftime('%H:%M:%S')}] [Query] 搜索完成: {len(results)} 个结果"})
         return jsonify({'success': True, 'query': query, 'results': results, 'count': len(results)})
     except Exception as e:
+        socketio.emit('console_output', {'app': 'query', 'line': f"[{datetime.now().strftime('%H:%M:%S')}] [Query] 搜索失败: {e}"})
         return jsonify({'success': False, 'message': str(e)})
 
 
@@ -1027,9 +1127,31 @@ def summary_v1():
 
     topics_text = "\n\n".join(_build_topics_text(include_insight=False))
     today = datetime.now().strftime('%Y年%m月%d日')
-    prompt = f"""你是舆情监测分析专家。报告日期：{today}，监测范围：近半年（2025年11月至今）。
+    topic_count = len(all_search_results)
 
-以下是{len(all_search_results)}个关键词的近半年**舆情监测**搜索结果。请生成舆情简报（600字以内）。
+    if topic_count == 1:
+        # 单主题搜索：围绕搜索词生成深度舆情简报
+        search_query = list(all_search_results.keys())[0]
+        prompt = f"""你是舆情监测分析专家。报告日期：{today}。
+
+用户搜索了关键词「{search_query}」，以下是搜索结果。请生成一份围绕该关键词的**舆情简报**（800-1200字）。
+
+要求：
+1. 分析该话题的**舆论争议、负面评价、投诉、安全事故、公众情绪**
+2. 重点关注近半年的舆情动态，忽略项目建设进度信息
+3. 列出关键舆情发现，标注来源URL
+4. 有争议写争议，无争议写明"未发现明显负面舆情"
+5. 末尾汇总所有引用来源URL
+
+搜索结果：
+{topics_text}
+
+请生成「{search_query}」舆情简报："""
+    else:
+        # 多主题批量：分类汇总模板
+        prompt = f"""你是舆情监测分析专家。报告日期：{today}，监测范围：近半年（2025年11月至今）。
+
+以下是{topic_count}个关键词的近半年**舆情监测**搜索结果。请生成舆情简报（600字以内）。
 
 重要：只关注近半年的**舆论争议、负面评价、投诉、安全事故、公众情绪**，忽略半年以前的旧闻和项目建设进度信息。
 
@@ -1102,6 +1224,35 @@ def summary_v2():
 
 
 @app.route('/api/latest-report')
+@app.route('/api/report/status')
+def report_status():
+    """检查 Insight/Query Agent 是否完成（检测输出目录文件修改时间）"""
+    import os as _os
+    since = request.args.get('since', '0')
+    since_ts = float(since) / 1000.0 if since else 0  # 前端传毫秒时间戳
+
+    def _has_new_file(directory):
+        d = Path(directory)
+        if not d.exists():
+            return False
+        for f in d.glob('*.md'):
+            if f.stat().st_mtime > since_ts:
+                return True
+        return False
+
+    insight_dir = Path('insight_engine_streamlit_reports')
+    query_dir = Path('query_engine_streamlit_reports')
+    insight_ready = _has_new_file(insight_dir) if since_ts > 0 else (insight_dir.exists() and any(insight_dir.glob('*.md')))
+    query_ready = _has_new_file(query_dir) if since_ts > 0 else (query_dir.exists() and any(query_dir.glob('*.md')))
+    engines_ready = insight_ready and query_ready
+    return jsonify({
+        'success': True,
+        'engines_ready': engines_ready,
+        'insight_ready': insight_ready,
+        'query_ready': query_ready
+    })
+
+
 def latest_report():
     """返回最近生成的报告"""
     path = Path('final_reports')
@@ -1311,16 +1462,13 @@ def handle_status_request():
     })
 
 def _auto_start_and_query():
-    """后台自动启动系统组件，并直接执行查询（不依赖前端）"""
+    """后台自动启动系统组件（不再自动查询，由用户手动输入触发）"""
     time.sleep(3)
     try:
         logger.info("自动启动系统组件...")
         initialize_system_components()
         _set_system_state(started=True, starting=False)
-        logger.info("系统组件已自动启动，开始后端自动查询...")
-
-        # 直接从后端执行查询
-        _run_backend_queries()
+        logger.info("系统组件已自动启动，等待用户输入查询...")
     except Exception as e:
         logger.error(f"自动启动失败: {e}")
         _set_system_state(started=False, starting=False)

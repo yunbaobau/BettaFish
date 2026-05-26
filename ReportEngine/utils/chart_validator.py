@@ -683,10 +683,26 @@ class ChartRepairer:
         widget_id = widget_block.get('widgetId', 'unknown')
         logger.info(f"图表 {widget_id} 开始API修复，共 {len(self.llm_repair_fns)} 个Engine可用")
 
+        import threading as _th
         for idx, repair_fn in enumerate(self.llm_repair_fns):
             try:
                 logger.info(f"尝试使用Engine {idx + 1}/{len(self.llm_repair_fns)} 修复图表 {widget_id}")
-                repaired = repair_fn(widget_block, validation_result.errors)
+                # 超时保护：LLM调用最多30秒
+                result = [None]
+                def _call():
+                    try:
+                        result[0] = repair_fn(widget_block, validation_result.errors)
+                    except Exception as e:
+                        result[0] = e
+                t = _th.Thread(target=_call, daemon=True)
+                t.start()
+                t.join(timeout=30)
+                if t.is_alive():
+                    logger.warning(f"图表 {widget_id} Engine {idx + 1} 修复超时(30s)，跳过")
+                    continue
+                repaired = result[0]
+                if isinstance(repaired, Exception):
+                    raise repaired
 
                 if repaired and isinstance(repaired, dict):
                     # 验证修复结果

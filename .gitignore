@@ -345,6 +345,8 @@ insight_engine_streamlit_reports/
 media_engine_streamlit_reports/
 query_engine_streamlit_reports/
 final_reports/
+reports/
+app_output.log
 forward_prs.sh
 
 # Claude Code settings
