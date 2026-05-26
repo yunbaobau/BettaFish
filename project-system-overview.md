@@ -1,19 +1,18 @@
 # BettaFish 项目系统说明文档
 
-本文档基于当前仓库源码梳理，面向后续接手、部署、二次开发和问题定位。BettaFish（微舆）是一个多智能体舆情分析系统：用户提交自然语言查询后，系统并行调度私域数据库挖掘、多模态搜索、网页新闻搜索三个研究 Agent，并通过 ForumEngine 进行日志级协作讨论，最终由 ReportEngine 将多源研究结果生成结构化 HTML/PDF 报告。
+本文档基于当前仓库源码梳理，面向后续接手、部署、二次开发和问题定位。BettaFish（微舆）是一个多智能体舆情分析系统：用户提交自然语言查询后，系统并行调度私域数据库挖掘、多模态搜索、网页新闻搜索三个研究 Agent，由 ReportEngine 将多源研究结果生成结构化 HTML/PDF 报告。
 
 当前版本基于 [BettaFish](https://github.com/666ghj/BettaFish) v1.2.1。
 
 ## 1. 系统定位
 
-BettaFish 的核心目标不是单一搜索或单次总结，而是把"数据采集、专题研究、协作辩论、报告生成"串成完整流水线：
+BettaFish 的核心目标不是单一搜索或单次总结，而是把"数据采集、专题研究、报告生成"串成完整流水线：
 
 - 通过 MindSpider 采集热点新闻、社媒内容、评论和互动数据，沉淀到数据库。
 - 通过 InsightEngine 读取私有数据库，补充历史舆情、评论与情感倾向。
 - 通过 MediaEngine 调用 Bocha 或 Anspire，多模态理解网页、图片、视频、结构化卡片等外部信息。
 - 通过 QueryEngine 调用 Tavily，补充国内外新闻、网页和时效信息。
-- 通过 ForumEngine 监听三个 Agent 的 SummaryNode 输出，生成主持人引导，形成多轮"论坛"讨论。
-- 通过 ReportEngine 读取三引擎最新 Markdown 报告和 `logs/forum.log`，生成模板化、可交互的终稿。
+- 通过 ReportEngine 读取三引擎最新 Markdown 报告，生成模板化、可交互的终稿。
 
 ## 2. 总体架构
 
@@ -21,26 +20,16 @@ BettaFish 的核心目标不是单一搜索或单次总结，而是把"数据采
 flowchart TB
     User["用户查询"] --> Flask["Flask 主应用 app.py<br/>HTTP + SocketIO + 子进程管理"]
     Flask --> InsightUI["Insight Streamlit<br/>8501"]
-    Flask --> MediaUI["Media Streamlit<br/>8502"]
     Flask --> QueryUI["Query Streamlit<br/>8503"]
 
     InsightUI --> Insight["InsightEngine<br/>私有数据库挖掘"]
-    MediaUI --> Media["MediaEngine<br/>多模态搜索分析"]
     QueryUI --> Query["QueryEngine<br/>网页/新闻搜索"]
 
     Insight --> InsightOut["insight_engine_streamlit_reports/*.md<br/>logs/insight.log"]
-    Media --> MediaOut["media_engine_streamlit_reports/*.md<br/>logs/media.log"]
     Query --> QueryOut["query_engine_streamlit_reports/*.md<br/>logs/query.log"]
 
-    InsightOut --> Forum["ForumEngine<br/>monitor.py 日志监听"]
-    MediaOut --> Forum
-    QueryOut --> Forum
-    Forum --> ForumLog["logs/forum.log"]
-
     InsightOut --> Report["ReportEngine<br/>模板选择 -> 布局 -> 篇幅 -> 章节 -> IR -> HTML/PDF"]
-    MediaOut --> Report
     QueryOut --> Report
-    ForumLog --> Report
     Report --> Final["final_reports/*<br/>ReportEngine state / IR / HTML / PDF"]
 ```
 
@@ -49,33 +38,30 @@ flowchart TB
 1. 用户访问 `http://localhost:5000`，由 `app.py` 渲染 `templates/index.html`。
 2. 前端调用 `/api/system/start`，`app.py` 执行 `initialize_system_components()`：
    - 初始化 MindSpider 数据库连接与表结构检查。
-   - 启动三个 Streamlit 子应用：Insight 8501、Media 8502、Query 8503。
-   - 启动 ForumEngine 日志监控线程。
+   - 启动两个 Streamlit 子应用：Insight 8501、Query 8503。
    - 初始化 ReportEngine 并注册 `/api/report/*` 蓝图。
-3. 用户提交查询到 `/api/search`，Flask 将同一查询转发给三个运行中的 Streamlit 应用 `/api/search`。
-4. 三个 Agent 各自执行 `research()`：生成报告结构、逐段初搜、反思搜索、最终格式化，并保存 Markdown 报告。
-5. ForumEngine 监控 `logs/insight.log`、`logs/media.log`、`logs/query.log`，捕获 `FirstSummaryNode` 和 `ReflectionSummaryNode` 的有效输出，写入 `logs/forum.log`；每累计 5 条 Agent 发言触发一次 Forum Host 发言。
-6. 前端调用 `/api/report/generate` 后，ReportEngine 检查三引擎是否都有新报告文件，加载最新 Markdown 与论坛日志，后台线程生成最终报告。
-7. ReportEngine 通过 SSE `/api/report/stream/<task_id>` 推送模板选择、布局、章节生成、重试、HTML 完成等事件。
-8. 终稿写入 `final_reports/`，中间 IR 和状态文件也会一起持久化，前端可预览或下载。
+3. 用户提交查询到 `/api/search`，Flask 将同一查询转发给两个运行中的 Streamlit 应用 `/api/search`。
+4. 两个 Agent 各自执行 `research()`：生成报告结构、逐段初搜、反思搜索、最终格式化，并保存 Markdown 报告。
+5. 前端调用 `/api/report/generate` 后，ReportEngine 检查引擎是否都有新报告文件，加载最新 Markdown，后台线程生成最终报告。
+6. ReportEngine 通过 SSE `/api/report/stream/<task_id>` 推送模板选择、布局、章节生成、重试、HTML 完成等事件。
+7. 终稿写入 `final_reports/`，中间 IR 和状态文件也会一起持久化，前端可预览或下载。
 
 ## 4. 目录与模块职责
 
 | 路径 | 职责 |
 | --- | --- |
-| `app.py` | Flask 主入口，负责配置读写、系统启动/关停、Streamlit 子进程管理、SocketIO 推送、Forum 日志转发和统一搜索入口。 |
+| `app.py` | Flask 主入口，负责配置读写、系统启动/关停、Streamlit 子进程管理、SocketIO 推送和统一搜索入口。 |
 | `config.py` | 全局 Pydantic Settings，集中管理数据库、各 Engine LLM、搜索 API、反思次数、内容长度等配置。 |
-| `SingleEngineApp/` | 三个独立 Streamlit 应用，每个应用包装对应 Engine，接收自动查询并展示研究过程和结果。 |
+| `SingleEngineApp/` | 两个独立 Streamlit 应用，每个应用包装对应 Engine，接收自动查询并展示研究过程和结果。 |
 | `InsightEngine/` | 私有数据库舆情挖掘 Agent，查询 MindSpider 入库数据，并集成关键词优化、聚类采样和情感分析。 |
-| `MediaEngine/` | 多模态搜索 Agent，按 `SEARCH_TOOL_TYPE` 调用 Bocha 或 Anspire。 |
+| `MediaEngine/` | 多模态搜索 Agent，按 `SEARCH_TOOL_TYPE` 调用 Bocha 或 Anspire。（当前已禁用） |
 | `QueryEngine/` | 网页/新闻搜索 Agent，调用 Tavily 工具集。 |
-| `ForumEngine/` | 论坛协作引擎，监听三引擎日志，抽取总结节点输出，调用 Forum Host 生成讨论引导。 |
 | `ReportEngine/` | 最终报告生成引擎，负责模板选择、章节规划、章节 JSON 生成、IR 装订、HTML/PDF 渲染和 SSE 接口。包含 `core/`、`ir/`、`nodes/`、`renderers/`、`utils/` 子模块。 |
 | `MindSpider/` | 舆情爬虫与数据库初始化系统，分为热点话题提取和社媒深度爬取两阶段。 |
 | `SentimentAnalysisModel/` | 情感分析和话题检测模型集合，包含 BERT、GPT-2、Qwen、传统 ML 等实现。 |
-| `utils/` | 通用工具模块：`retry_helper.py`（带指数退避的重试装饰器）、`forum_reader.py`（论坛日志读取）、`github_issues.py`（GitHub Issues 交互）。 |
-| `tests/` | 目前重点覆盖 ForumEngine 日志解析和 ReportEngine 清洗逻辑。 |
-| `logs/` | 运行期日志目录，ForumEngine 和各 Engine 协作主要依赖这里的日志文件。 |
+| `utils/` | 通用工具模块：`retry_helper.py`（带指数退避的重试装饰器）、`github_issues.py`（GitHub Issues 交互）。 |
+| `tests/` | 目前覆盖 ReportEngine 清洗逻辑。 |
+| `logs/` | 运行期日志目录。 |
 | `final_reports/` | ReportEngine 最终报告及状态文件输出目录。 |
 | `static/` | 静态资源，包含 `Switch/js/` 前端 JS、`v2_report_example/` 报告样例。 |
 | `templates/` | `index.html`（约 5.4MB，含前端单页应用）。 |
@@ -96,18 +82,17 @@ flowchart TB
 
 ### 5.1 生命周期管理
 
-- `initialize_system_components()`：完整系统启动入口，包含 MindSpider 数据库初始化、三个 Streamlit 子应用启动、ForumEngine 启动、ReportEngine 初始化。
-- `start_streamlit_app()`：用 `subprocess.Popen` 启动 `streamlit run`，端口固定为 8501/8502/8503。
+- `initialize_system_components()`：完整系统启动入口，包含 MindSpider 数据库初始化、两个 Streamlit 子应用启动、ReportEngine 初始化。
+- `start_streamlit_app()`：用 `subprocess.Popen` 启动 `streamlit run`，端口固定为 8501/8503。
 - `wait_for_app_startup()` 和 `check_app_status()`：通过 Streamlit healthcheck 判断子应用是否就绪。
-- `cleanup_processes()` / `cleanup_processes_concurrent()`：停止子进程和 ForumEngine。
+- `cleanup_processes()` / `cleanup_processes_concurrent()`：停止子进程。
 - `/api/system/start`、`/api/system/shutdown`、`/api/system/status`：系统级控制接口。
 
 ### 5.2 搜索与日志接口
 
-- `/api/search`：检查运行中的子应用后，将查询转发给三个 Streamlit 应用的 `/api/search`。
+- `/api/search`：检查运行中的子应用后，将查询转发给运行中 Streamlit 应用的 `/api/search`。
 - `/api/output/<app_name>`：读取各 Engine 的输出日志。
-- `/api/forum/log`、`/api/forum/log/history`：读取论坛日志，支持增量位置。
-- SocketIO 事件：用于前端实时显示 console output、forum message 和状态更新。
+- SocketIO 事件：用于前端实时显示 console output 和状态更新。
 
 ### 5.3 配置读写
 
@@ -203,38 +188,7 @@ QueryEngine 使用 `TavilyNewsAgency` 进行网页和新闻搜索，适合补充
 
 Agent 会校验日期格式，工具缺参或日期非法时回退到基础搜索。
 
-## 10. ForumEngine
-
-ForumEngine 是协作层，不直接参与搜索，而是通过日志把三个独立 Agent 的阶段性结论组织成"讨论"。
-
-### 10.1 日志监听机制
-
-`ForumEngine/monitor.py` 的 `LogMonitor` 每秒检查：
-
-- `logs/insight.log`
-- `logs/media.log`
-- `logs/query.log`
-
-它识别 `FirstSummaryNode`、`ReflectionSummaryNode`、`nodes.summary_node` 以及中文标识"正在生成首次段落总结""正在生成反思总结"。同时它会过滤 ERROR 块、无价值短日志和 JSON 解析失败信息，尽量只写入总结正文。
-
-### 10.2 论坛日志格式
-
-ForumEngine 写入 `logs/forum.log`，格式为：
-
-```text
-[HH:MM:SS] [INSIGHT] 内容
-[HH:MM:SS] [MEDIA] 内容
-[HH:MM:SS] [QUERY] 内容
-[HH:MM:SS] [HOST] 主持人发言
-```
-
-内容中的实际换行会转义为 `\n`，方便一条发言保持在一行。`app.py` 的 `parse_forum_log_line()` 会把它重新解析为前端消息。
-
-### 10.3 Forum Host
-
-`ForumEngine/llm_host.py` 通过 OpenAI 兼容接口调用配置中的 Forum Host 模型。默认逻辑是每累计 5 条 Agent 发言触发一次主持人发言，主持人输出包括事件梳理、观点整合、趋势预测和后续问题引导。LLM 调用使用 `utils/retry_helper.py` 的 `with_graceful_retry` 装饰器实现自动重试。
-
-## 11. ReportEngine
+## 10. ReportEngine
 
 ReportEngine 是最终产物链路，也是系统中最复杂的模块（约 12000 行），核心入口有两个：
 
@@ -255,7 +209,7 @@ ReportEngine 蓝图注册到 Flask 的 `/api/report` 前缀下，主要接口：
 
 `ReportTask` 维护 `pending/running/completed/error` 状态、进度、结果路径、最近 1000 条事件历史和 SSE 事件自增 ID。
 
-### 11.2 生成主链路
+### 10.2 生成主链路
 
 `ReportAgent.generate_report()` 的阶段如下：
 
@@ -265,12 +219,12 @@ ReportEngine 蓝图注册到 Flask 的 `/api/report` 前缀下，主要接口：
 4. 文档布局：`DocumentLayoutNode` 生成标题、hero、目录计划、主题样式等。
 5. 篇幅规划：`WordBudgetNode` 为每章生成目标字数和写作约束。
 6. 章节生成：`ChapterGenerationNode` 逐章调用 LLM，写入章节目录和 `stream.raw`，并推送 `chapter_chunk`。
-7. 错误重试：对 JSON 解析失败、结构校验失败、内容密度不足、内容安全限制等进行重试；内容过稀时可能保留字数最多版本作为兜底。失败时使用跨引擎回退 LLM（Report -> Forum -> Insight -> Media）。
+7. 错误重试：对 JSON 解析失败、结构校验失败、内容密度不足、内容安全限制等进行重试；内容过稀时可能保留字数最多版本作为兜底。失败时使用跨引擎回退 LLM（Report -> Insight -> Media）。
 8. IR 装订：`DocumentComposer.build_document()` 将章节 JSON 装订成 Document IR。
 9. HTML 渲染：`HTMLRenderer.render()` 输出交互式 HTML（含 Chart.js、WordCloud2、MathJax 等前端库）。
 10. 持久化：保存 HTML、IR、状态文件，并通过 SSE 推送路径和完成事件。
 
-### 11.3 Document IR
+### 10.3 Document IR
 
 ReportEngine 的中间表示位于 `ReportEngine/ir/`，当前 IR_VERSION = "1.0"。大体结构为：
 
@@ -364,7 +318,7 @@ flowchart LR
 | --- | --- |
 | Web 服务 | `HOST`、`PORT` |
 | 数据库 | `DB_DIALECT`、`DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`、`DB_CHARSET` |
-| LLM（6 组） | `INSIGHT_ENGINE_*`、`MEDIA_ENGINE_*`、`QUERY_ENGINE_*`、`REPORT_ENGINE_*`、`MINDSPIDER_*`、`FORUM_HOST_*`、`KEYWORD_OPTIMIZER_*` |
+| LLM（5 组） | `INSIGHT_ENGINE_*`、`QUERY_ENGINE_*`、`REPORT_ENGINE_*`、`MINDSPIDER_*`、`KEYWORD_OPTIMIZER_*` |
 | 搜索 API | `TAVILY_API_KEY`、`SEARCH_TOOL_TYPE`（BochaAPI / AnspireAPI）、`BOCHA_*`、`ANSPIRE_*` |
 | 搜索/生成限制 | `DEFAULT_SEARCH_HOT_CONTENT_LIMIT`、`DEFAULT_SEARCH_TOPIC_GLOBALLY_LIMIT_PER_TABLE`、`DEFAULT_GET_COMMENTS_FOR_TOPIC_LIMIT`、`DEFAULT_SEARCH_TOPIC_ON_PLATFORM_LIMIT`、`MAX_SEARCH_RESULTS_FOR_LLM`、`MAX_HIGH_CONFIDENCE_SENTIMENT_RESULTS`、`MAX_REFLECTIONS`、`MAX_PARAGRAPHS`、`SEARCH_TIMEOUT`、`MAX_CONTENT_LENGTH` |
 
@@ -435,7 +389,7 @@ docker-compose up -d
 - 使用 `uv` 安装依赖（比 pip 更快）。
 - 安装 Playwright Chromium 及系统依赖（libgtk、libpango、libcairo 等约 20 个包）。
 - 复制 `.env.example` 为 `.env`（运行时通过 volume 覆盖）。
-- 暴露端口 5000、8501、8502、8503。
+- 暴露端口 5000、8501、8503。
 
 `docker-compose.yml` 包含两个服务：
 
@@ -497,15 +451,12 @@ python export_pdf.py              # 从已有 HTML 导出 PDF
 
 | 测试文件 | 覆盖内容 |
 | --- | --- |
-| `tests/test_monitor.py` | ForumEngine 日志解析，覆盖旧格式 `[HH:MM:SS]` 和 loguru 新格式 |
 | `tests/test_report_engine_sanitization.py` | ReportEngine 输出清洗逻辑 |
-| `tests/forum_log_test_data.py` | ForumEngine 日志测试数据 |
 
 ### 15.2 常用命令
 
 ```bash
 pytest tests/ -v
-pytest tests/test_monitor.py -v
 ```
 
 ### 15.3 集成验证检查清单
@@ -514,11 +465,10 @@ pytest tests/test_monitor.py -v
 
 1. `.env` 配置是否齐备（API Key、数据库连接）。
 2. 数据库是否可连接，MindSpider 表是否初始化。
-3. 三个 Streamlit 端口是否启动成功（8501/8502/8503）。
-4. `insight_engine_streamlit_reports/`、`media_engine_streamlit_reports/`、`query_engine_streamlit_reports/` 是否产生新的 `.md` 文件。
-5. `logs/forum.log` 是否捕获到三引擎发言。
-6. `/api/report/status` 是否显示 `engines_ready`。
-7. `/api/report/stream/<task_id>` 是否持续收到 SSE 事件（模板选择 → 布局 → 章节 → HTML 完成）。
+3. Streamlit 端口是否启动成功（8501/8503）。
+4. `insight_engine_streamlit_reports/`、`query_engine_streamlit_reports/` 是否产生新的 `.md` 文件。
+5. `/api/report/status` 是否显示 `engines_ready`。
+6. `/api/report/stream/<task_id>` 是否持续收到 SSE 事件（模板选择 → 布局 → 章节 → HTML 完成）。
 
 ## 16. 工具模块
 
@@ -536,22 +486,17 @@ pytest tests/test_monitor.py -v
 
 二次开发时建议复用此模块处理所有外部调用，避免重复实现重试逻辑。
 
-### 16.2 forum_reader.py
-
-`utils/forum_reader.py` 提供论坛日志的读取和解析工具，供 ReportEngine 和其他模块使用。
 
 ## 17. 关键设计特征
 
 - **多进程松耦合**：Flask 负责统一入口，三个研究 Agent 通过 Streamlit 子进程独立运行，故障边界较清晰。
-- **文件驱动集成**：三引擎结果通过 Markdown 文件交给 ReportEngine，协作上下文通过 `forum.log` 传递，降低了模块间直接调用复杂度。
-- **日志即协作协议**：ForumEngine 不是侵入 Agent 内部状态，而是监听 SummaryNode 日志输出形成跨 Agent 讨论。
+- **文件驱动集成**：三引擎结果通过 Markdown 文件交给 ReportEngine，降低了模块间直接调用复杂度。
 - **节点化 LLM 流程**：搜索决策、总结、反思、格式化、模板选择、布局、篇幅、章节生成都以节点形式拆分，便于替换提示词和模型。
 - **IR 优先渲染**：ReportEngine 先装订 Document IR，再渲染 HTML/PDF，适合扩展多种输出格式。
 - **强依赖外部配置**：LLM、搜索、数据库、爬虫都由配置决定，部署前配置完整性比代码改动更重要。
 
 ## 18. 维护注意事项
 
-- **不要随意改变 `logs/*.log` 的格式**。ForumEngine 对 SummaryNode 日志格式有正则依赖，格式变化需要同步更新 `tests/test_monitor.py`。
 - **修改三引擎报告输出目录时**，需要同步调整 ReportEngine 的 `FileCountBaseline` 和 `check_engines_ready()` 目录映射。
 - **修改 ReportEngine 章节 JSON schema 时**，需要同步更新 `ReportEngine/ir/validator.py`、`ChapterGenerationNode` 提示词和渲染器。
 - **修改 `SEARCH_TOOL_TYPE` 后**，要确认 MediaEngine 对应 API Key 存在，否则 Streamlit 应用会在启动研究前报错。
@@ -589,19 +534,18 @@ pytest tests/test_monitor.py -v
 
 ### 19.5 文件驱动模式
 
-二次开发时注意系统遵循**文件驱动集成**模式：三引擎结果通过 Markdown 文件传递，协作通过 `forum.log` 传递。新增模块时建议保持这一模式，避免引入模块间直接调用依赖。
+二次开发时注意系统遵循**文件驱动集成**模式：三引擎结果通过 Markdown 文件传递。新增模块时建议保持这一模式，避免引入模块间直接调用依赖。
 
 ## 20. 推荐阅读顺序
 
 如果要继续深入改造，建议按以下顺序读代码：
 
-1. `app.py`：理解系统如何启动、转发查询、关闭和转发日志。
+1. `app.py`：理解系统如何启动、转发查询、关闭进程。
 2. `SingleEngineApp/query_engine_streamlit_app.py`：理解单 Agent UI 如何触发研究。
 3. `QueryEngine/agent.py`：用最轻的外部搜索 Agent 理解通用 `DeepSearchAgent` 流程。
 4. `InsightEngine/agent.py` 与 `InsightEngine/tools/search.py`：理解数据库搜索和情感分析增强。
-5. `ForumEngine/monitor.py`：理解日志协作协议。
-6. `ReportEngine/flask_interface.py`：理解报告任务、SSE 和状态管理。
-7. `ReportEngine/agent.py`：理解最终报告生成主链路。
+5. `ReportEngine/flask_interface.py`：理解报告任务、SSE 和状态管理。
+6. `ReportEngine/agent.py`：理解最终报告生成主链路。
 8. `ReportEngine/core/`、`ReportEngine/ir/`、`ReportEngine/renderers/`：理解 IR 与渲染。
 9. `MindSpider/main.py` 与 `MindSpider/schema/`：理解数据采集和数据库结构。
 10. `utils/retry_helper.py`：理解模块间复用的工具模式。
